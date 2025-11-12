@@ -11,6 +11,37 @@ from plot import plot_frequency_decomposition, plot_fourier_mode_analysis
 
 # Suppress overflow/divide warnings that clutter output
 warnings.filterwarnings('ignore', category=RuntimeWarning)
+
+def print_config(title, **kwargs):
+    """
+    Print configuration parameters in a formatted way.
+    This function is designed to be flexible and handle any arguments.
+    
+    Args:
+        title: Title for the configuration section
+        **kwargs: Arbitrary keyword arguments to print
+    """
+    print("\n" + "="*70)
+    print(f"{title:^70}")
+    print("="*70)
+    
+    # Find the longest key name for alignment
+    max_key_len = max(len(str(k)) for k in kwargs.keys()) if kwargs else 0
+    
+    for key, value in kwargs.items():
+        # Format lists nicely
+        if isinstance(value, (list, tuple, np.ndarray)):
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
+            value_str = str(value)
+        else:
+            value_str = str(value)
+        
+        # Print with alignment
+        print(f"  {key:<{max_key_len}} : {value_str}")
+    
+    print("="*70 + "\n")
+
 def create_1d_possion_matrix(n):
     """
     Create 1D Poisson matrix for n interior points
@@ -50,7 +81,8 @@ def create_1d_advection_matrix(n):
     return A
 
 def problem1(matrix='poisson', N_values=[50, 100, 200], num_levels=2, nu=2, smooth_params=2/3, 
-             smoother='jacobi', tol=1e-8, max_iterations=1e6, use_galerkin=True, solver_type='multigrid'):
+             smoother='jacobi', tol=1e-8, max_iterations=1e6,
+             use_galerkin=True, solver_type='multigrid', test_mode=False):
     """
     Solve 1D Poisson equation using multigrid V-cycle or Jacobi iteration
     Args:
@@ -71,6 +103,33 @@ def problem1(matrix='poisson', N_values=[50, 100, 200], num_levels=2, nu=2, smoo
         create_matrix = create_1d_advection_matrix
     else:
         raise ValueError(f"Invalid matrix: {matrix}")
+    
+    # Print solver configuration once for all N values
+    if solver_type == 'jacobi-only':
+        print_config(
+            "JACOBI SOLVER CONFIGURATION",
+            solver_type=solver_type,
+            N_values=N_values,
+            omega=smooth_params,
+            max_iterations=max_iterations,
+            tol=tol,
+            matrix_type=matrix
+        )
+    else:  # multigrid
+        print_config(
+            "MULTIGRID SOLVER CONFIGURATION",
+            solver_type=solver_type,
+            N_values=N_values,
+            num_levels=num_levels,
+            smoother=smoother,
+            nu=nu,
+            smooth_params=smooth_params,
+            tol=tol,
+            max_iterations=max_iterations,
+            use_galerkin=use_galerkin,
+            matrix_type=matrix
+        )
+    
     results = []
     for N in N_values:  
         n = N - 1 # number of interior points
@@ -94,31 +153,34 @@ def problem1(matrix='poisson', N_values=[50, 100, 200], num_levels=2, nu=2, smoo
                                     tol=tol, max_iterations=max_iterations,
                                     matrix_constructor=create_matrix, use_galerkin=use_galerkin)
 
-        x, info = solver.solve(A, b, x0)
+        x, info = solver.solve(A, b, x0, test_mode)
         
         # Extract history from solver
         rel_residuals = info['residual_history']
-        
+        solution_history = info['solution_history']
         # Calculate convergence factors
         rhos = [1.0]
+        true_rhos = [1.0]
         for i in range(1, len(rel_residuals)):
             rho = rel_residuals[i] / rel_residuals[i-1]
             rhos.append(rho)
+            true_rho = np.linalg.norm(solution_history[i] - u_true) / np.linalg.norm(solution_history[i-1] - u_true)
+            true_rhos.append(true_rho)
         # Calculate final errors (only the final solution matters for plotting)
         errors_sup = [np.linalg.norm(x - u_true, np.inf)]
         errors_l2 = [np.linalg.norm(x - u_true)]
-        
         results.append({
             'N': N,
             'solution': x,
             'u_true': u_true,
             'x_grid': x_grid,
             'solution_history': solver.solution_history,
+            'true_rhos': true_rhos,
             'errors_sup': errors_sup,
             'errors_l2': errors_l2,
             'rel_residuals': rel_residuals,
             'rhos': rhos,
-            'info': info
+            'info': info,
         })
     return results
 
@@ -149,7 +211,7 @@ def parse_args():
     parser.add_argument('-t', '--tol', type=float, default=1e-8,
                         help='Convergence tolerance')
     
-    parser.add_argument('-m', '--max-iter', type=int, default=int(1e6),
+    parser.add_argument('-m', '--max-iter', type=int, default=int(1e5),
                         dest='max_iterations',
                         help='Maximum number of iterations')
     
@@ -162,14 +224,6 @@ def parse_args():
     parser.add_argument('--plot-modes', action='store_true',
                         help='Plot Fourier mode analysis (sine basis decomposition)')
     
-    parser.add_argument('-o', '--output', type=str, default='frequency_decomposition.png',
-                        help='Output filename for frequency decomposition plot')
-    
-    parser.add_argument('--modes-output', type=str, default='fourier_modes.png',
-                        help='Output filename for Fourier mode analysis plot')
-    
-    parser.add_argument('--max-modes', type=int, default=None,
-                        help='Maximum number of Fourier modes to display')
     parser.add_argument('--matrix', type=str, default='possion', choices=['possion', 'advection'],
                         help='Matrix to use for the problem')
     parser.add_argument('--no-galerkin', action='store_false', dest='use_galerkin',
@@ -177,10 +231,31 @@ def parse_args():
     parser.add_argument('--solver', type=str, default='multigrid', 
                         choices=['multigrid', 'jacobi-only'],
                         help='Solver type: multigrid V-cycle or Jacobi-only iteration')
+    parser.add_argument('--test-mode', action='store_true', default=False,
+                        help='If True, do not stop when the residual is less than the tolerance')
+
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
+    
+    # Print main configuration
+    print_config(
+        "MAIN FUNCTION CONFIGURATION",
+        matrix=args.matrix,
+        grid_sizes=args.grid_sizes,
+        num_levels=args.num_levels,
+        nu=args.nu,
+        smooth_params=args.smooth_params,
+        smoother=args.smoother,
+        tol=args.tol,
+        max_iterations=args.max_iterations,
+        use_galerkin=args.use_galerkin,
+        solver_type=args.solver,
+        test_mode=args.test_mode,
+        plot_freq=args.plot_freq,
+        plot_modes=args.plot_modes,
+    )
     
     # Run solver
     results = problem1(
@@ -193,7 +268,8 @@ if __name__ == "__main__":
         tol=args.tol,
         max_iterations=args.max_iterations,
         use_galerkin=args.use_galerkin,
-        solver_type=args.solver
+        solver_type=args.solver,
+        test_mode=args.test_mode
     )
     
     print("\n" + "="*60)
@@ -202,18 +278,19 @@ if __name__ == "__main__":
     for res in results:
         N = res['N']
         iters = res['info']['iterations']
-        avg_rho = np.mean(res['rhos'][1:]) if len(res['rhos']) > 1 else 0
+        avg_rho = np.prod(res['rhos'][1:]) ** (1/(len(res['rhos'])-1)) if len(res['rhos']) > 1 else 0
         final_error = res['errors_sup'][0]
+        # true_avg_rho = np.prod(res['true_rhos'][1:]) ** (1/(len(res['true_rhos'])-1)) if len(res['true_rhos']) > 1 else 0
+        #print(f"N={N:3d}: {iters:3d} iters, avg_rho={avg_rho:.4f}, true_avg_rho={true_avg_rho:.4f}, error={final_error:.2e}")
         print(f"N={N:3d}: {iters:3d} iters, avg_rho={avg_rho:.4f}, error={final_error:.2e}")
     print("="*60)
     
     # Plot frequency decomposition if requested
     if args.plot_freq:
-        plot_frequency_decomposition(results, save_path=args.output)
+        plot_frequency_decomposition(results)
     
     # Plot Fourier mode analysis if requested
     if args.plot_modes:
-        plot_fourier_mode_analysis(results, save_path=args.modes_output, 
-                                   max_modes=args.max_modes)
+        plot_fourier_mode_analysis(results)
 
 

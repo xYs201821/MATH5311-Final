@@ -278,7 +278,7 @@ class MultigridSolver:
     
     def __init__(self, num_levels=2, coarsest_level=2, smoother='jacobi', 
                  nu=2, smooth_params=2/3, max_iterations=1e6, tol=1e-8,
-                 matrix_constructor=None, use_galerkin=True):
+                 matrix_constructor=None, use_galerkin=True, test_mode=False):
         """
         Initialize multigrid solver
         
@@ -306,7 +306,7 @@ class MultigridSolver:
         self.residual_history = []
         self.solution_history = []  # Track solutions at each iteration
     
-    def solve(self, A, b, x0=None):
+    def solve(self, A, b, x0=None, test_mode=False):
         """
         Solve the linear system Ax = b using multigrid V-cycle
         
@@ -361,18 +361,21 @@ class MultigridSolver:
                 'rho': f'{rho:.4f}'
             })
             pbar.update(1)
-            
             # Check convergence
-            if residual_norm < self.tol * np.linalg.norm(b):
-                pbar.close()
-                info = {
-                    'converged': True,
-                    'iterations': iteration + 1,
-                    'residual_norm': residual_norm,
-                    'relative_residual': residual_norm / np.linalg.norm(b),
-                    'residual_history': self.residual_history
-                }
-                return x, info
+            if residual_norm < self.tol * np.linalg.norm(b) and test_mode==False:
+                break
+        # Check convergence
+        if residual_norm < self.tol * np.linalg.norm(b):
+            pbar.close()
+            info = {
+                'converged': True,
+                'iterations': iteration + 1,
+                'residual_norm': residual_norm,
+                'relative_residual': residual_norm / np.linalg.norm(b),
+                'residual_history': self.residual_history,
+                'solution_history': self.solution_history
+            }
+            return x, info
         
         pbar.close()
         info = {
@@ -380,7 +383,8 @@ class MultigridSolver:
             'iterations': self.max_iterations,
             'residual_norm': residual_norm,
             'relative_residual': residual_norm / np.linalg.norm(b),
-            'residual_history': self.residual_history
+            'residual_history': self.residual_history,
+            'solution_history': self.solution_history
         }
         return x, info
     
