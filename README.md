@@ -58,28 +58,6 @@ python plot_residuals.py --matrix advection --N 50 --nu 50
 | `--N` | `50` | Grid size |
 | `--nu` | `30` | Number of smoothing iterations |
 
-## Example Results
-
-### Multigrid vs Jacobi (N=50)
-
-| Solver | Iterations | Avg ρ | Convergence |
-|--------|-----------|-------|-------------|
-| **Multigrid** | 6 | 0.036 | ✓ Fast |
-| **Jacobi-only** | 200+ | 0.998 | ✗ Slow |
-
-
-## Features
-
-- **Multigrid V-cycle solver** with configurable levels and smoothing iterations
-- **Jacobi and Gauss-Seidel smoothers** with adjustable damping parameters
-- **Galerkin coarsening** for matrix construction
-- **Residual history tracking** with convergence analysis
-- **True error tracking** (true_rhos) for solution error convergence
-- **Configuration printing** - automatically displays all solver parameters before execution
-- **Residual plotting** - visualize convergence history with phase detection
-- **Frequency decomposition** - FFT-based error analysis
-- **Fourier mode analysis** - sine basis decomposition of errors
-
 ## Files
 
 - `main.py` - Main driver program with CLI and configuration printing

@@ -71,7 +71,7 @@ def decompose_error_frequencies(error, n):
     return high_freq, low_freq
 
 
-def plot_fourier_mode_analysis(results, save_path='fourier_modes.png', max_modes=None):
+def plot_fourier_mode_analysis(results, save_path='fourier_modes.png'):
     """
     Plot Fourier mode coefficient decay during multigrid iterations
     
@@ -92,8 +92,7 @@ def plot_fourier_mode_analysis(results, save_path='fourier_modes.png', max_modes
         n_interior = len(u_true)
         
         # Determine number of modes to plot
-        n_modes = max_modes if max_modes is not None else n_interior
-        n_modes = min(n_modes, n_interior)
+        n_modes = n_interior
         
         # Compute Fourier coefficients at each iteration
         all_coefficients = []
